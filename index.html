@@ -185,7 +185,7 @@ header button{
 <body>
 
 <header>
-  <h1>酒銘札</h1><span class="ver">v1.4</span>
+  <h1>酒銘札</h1><span class="ver">v1.5</span>
   <span class="sp"></span>
   <button id="btnMap">地図</button>
   <button id="btnStats">集計</button>
@@ -487,27 +487,19 @@ const LABEL_SCHEMA={type:'object',additionalProperties:false,
     rice:{type:'string',description:'原料米・酒米の品種（例: 山田錦）。複数なら「山田錦・雄町」のように併記'},
     note:{type:'string',description:'その他ラベルから読める特記（酵母・度数・生酛など）'}
   }};
-async function readLabel(b64s){
+async function apiPost(body){
   let res;
   try{
-  res=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{
-      'content-type':'application/json',
-      'x-api-key':cfg.apiKey,
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'
-    },
-    body:JSON.stringify({
-      model:cfg.model||'claude-haiku-4-5',
-      max_tokens:1024,
-      output_config:{format:{type:'json_schema',schema:LABEL_SCHEMA}},
-      messages:[{role:'user',content:[
-        ...b64s.map(b=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}})),
-        {type:'text',text:'これは日本酒のラベル写真です（裏ラベル・表ラベルの1〜2枚。裏ラベルに詳細情報が載っていることが多い）。読み取れる情報を統合して抽出してください。蔵元の住所はラベルに無くてもあなたの知識で補完して構いません（不確かなら都道府県＋市区町村まで）。判読できない項目は空文字にしてください。'}
-      ]}]
-    })
-  });
+    res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        'x-api-key':cfg.apiKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify(body)
+    });
   }catch(e){
     throw new Error('APIへの接続に失敗（ネット接続を確認。file://で開いている場合はブラウザがブロックすることがあります→Safariで試すか公開後のURLで）');
   }
@@ -518,11 +510,39 @@ async function readLabel(b64s){
     if(res.status===429) msg='レート制限中です。少し待って再試行してください';
     throw new Error(msg);
   }
-  const j=await res.json();
+  return res.json();
+}
+async function readLabel(b64s,useSearch){
+  const model=cfg.model||'claude-haiku-4-5';
+  const prompt=useSearch
+    ?'これは日本酒の表ラベル写真です。まず写真から銘柄名（と読み取れる範囲の情報）を特定し、ラベルに書かれていない情報（よみがな・蔵元名・都道府県・蔵元住所・特定名称・精米歩合・酒米など）はWeb検索で調べて補完してください。検索しても確認できなかった項目は空文字にしてください（推測で埋めない）。'
+    :'これは日本酒のラベル写真です（裏ラベル・表ラベルの1〜2枚。裏ラベルに詳細情報が載っていることが多い）。読み取れる情報を統合して抽出してください。蔵元の住所はラベルに無くてもあなたの知識で補完して構いません（不確かなら都道府県＋市区町村まで）。判読できない項目は空文字にしてください。';
+  const body={
+    model,
+    max_tokens:useSearch?2048:1024,
+    output_config:{format:{type:'json_schema',schema:LABEL_SCHEMA}},
+    messages:[{role:'user',content:[
+      ...b64s.map(b=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}})),
+      {type:'text',text:prompt}
+    ]}]
+  };
+  if(useSearch){
+    body.tools=[{type:/haiku/i.test(model)?'web_search_20250305':'web_search_20260209',name:'web_search',max_uses:3}];
+  }
+  let j=await apiPost(body);
+  // サーバ側ツールの反復上限 (pause_turn) → 続きを要求（最大2回）
+  for(let i=0;i<2&&j.stop_reason==='pause_turn';i++){
+    j=await apiPost({...body,messages:[...body.messages,{role:'assistant',content:j.content}]});
+  }
   if(j.stop_reason==='refusal') throw new Error('読み取りが拒否されました');
-  const txt=(j.content||[]).find(b=>b.type==='text')?.text||'';
+  const texts=(j.content||[]).filter(b=>b.type==='text');
+  const txt=texts.length?texts[texts.length-1].text:''; // 検索経由でも最終テキストがJSON
   try{ return JSON.parse(txt); }
-  catch(e){ const m=txt.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('応答の解析に失敗'); }
+  catch(e){
+    const all=texts.map(b=>b.text).join('\n');
+    const m=all.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]);
+    throw new Error('応答の解析に失敗');
+  }
 }
 
 /* ================= 地理院ジオコーディング ================= */
@@ -657,7 +677,7 @@ async function prepPhoto(file){
 function updateAiHint(){
   const el=$('aiStatus'); el.classList.remove('err');
   el.textContent=cfg.apiKey
-    ?'「裏写真(読取用)」を追加すると自動で読み取ります。表だけで読む場合は「読み取り」。'
+    ?'「裏写真(読取用)」を追加すると自動で読み取ります。表だけなら「読み取り」→Web検索で情報を補完します。'
     :'⚙設定でAPIキーを登録すると銘柄が自動入力されます。';
 }
 function fillIfEmpty(id,val){ const el=$(id); if(val&&!el.value) el.value=val; }
@@ -667,16 +687,18 @@ async function gatherB64s(){
   if(!b&&editingId){ const bl=await photoGet(editingId+':b'); if(bl) b=await blobToB64(bl); }
   if(!f&&editingId){ const bl=await photoGet(editingId); if(bl) f=await blobToB64(bl); }
   if(b) out.push(b); if(f) out.push(f);
-  return out;
+  return {imgs:out,hasBack:!!b};
 }
 async function runRead(){
   const el=$('aiStatus');
   if(!cfg.apiKey){ updateAiHint(); return; }
-  const imgs=await gatherB64s();
+  const {imgs,hasBack}=await gatherB64s();
   if(!imgs.length){ el.textContent='写真がありません'; return; }
-  el.classList.remove('err'); el.textContent='ラベルを読み取っています…';
+  const useSearch=!hasBack; // 表のみ→Web検索で補完
+  el.classList.remove('err');
+  el.textContent=useSearch?'ラベルを読み取り、ネットで調べています…（30秒ほどかかることがあります）':'ラベルを読み取っています…';
   try{
-    const r=await readLabel(imgs);
+    const r=await readLabel(imgs,useSearch);
     if(!$('formModal').classList.contains('open')) return;
     fillIfEmpty('fBrand',r.brand); fillIfEmpty('fKana',r.kana);
     fillIfEmpty('fBrewery',r.brewery);
