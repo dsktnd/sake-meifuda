@@ -185,7 +185,7 @@ header button{
 <body>
 
 <header>
-  <h1>酒銘札</h1><span class="ver">v1.5</span>
+  <h1>酒銘札</h1><span class="ver">v1.5.1</span>
   <span class="sp"></span>
   <button id="btnMap">地図</button>
   <button id="btnStats">集計</button>
@@ -546,13 +546,22 @@ async function readLabel(b64s,useSearch){
 }
 
 /* ================= 地理院ジオコーディング ================= */
+async function gsiSearch(q){
+  try{
+    const r=await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(q));
+    const a=await r.json();
+    if(Array.isArray(a)&&a.length){ const [lng,lat]=a[0].geometry.coordinates; return {lat,lng,src:'addr'}; }
+  }catch(e){}
+  return null;
+}
 async function geocode(addr,pref){
   if(addr){
-    try{
-      const r=await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(addr));
-      const a=await r.json();
-      if(Array.isArray(a)&&a.length){ const [lng,lat]=a[0].geometry.coordinates; return {lat,lng,src:'addr'}; }
-    }catch(e){}
+    let g=await gsiSearch(addr);
+    if(!g){ // 番地・ビル名で一致しない場合は数字以降を落として町名までで再検索
+      const s=addr.replace(/[0-9０-９].*$/,'').trim();
+      if(s&&s!==addr) g=await gsiSearch(s);
+    }
+    if(g) return g;
   }
   if(pref&&PREF_LL[pref]){ const [lat,lng]=PREF_LL[pref]; return {lat,lng,src:'pref'}; }
   return null;
@@ -766,21 +775,34 @@ $('fSave').addEventListener('click',async()=>{
     lat:prev?.lat??null, lng:prev?.lng??null,
     createdAt:prev?.createdAt||Date.now()
   };
-  // 座標: AI読み取り結果 or 住所変更時に再取得
-  if(pendingGeo){ rec.lat=pendingGeo.lat; rec.lng=pendingGeo.lng; }
-  if(rec.lat==null || (prev&&(prev.address!==rec.address||prev.pref!==rec.pref))){
+  // 座標: 住所・県が変わったら必ず再取得（AI読み取り時のpendingGeoは住所未変更のときだけ利用）
+  const addrChanged=prev&&(prev.address!==rec.address||prev.pref!==rec.pref);
+  let geoSrc=null;
+  if(pendingGeo&&!addrChanged){ rec.lat=pendingGeo.lat; rec.lng=pendingGeo.lng; geoSrc=pendingGeo.src; }
+  if(rec.lat==null||addrChanged){
     const g=await geocode(rec.address,rec.pref);
-    if(g){ rec.lat=g.lat; rec.lng=g.lng; }
+    if(g){ rec.lat=g.lat; rec.lng=g.lng; geoSrc=g.src; }
+  }
+  // 地図は蔵元単位でピン表示のため、同じ蔵元の他レコードにも新座標を反映
+  if(addrChanged&&rec.lat!=null){
+    const key=rec.brewery||rec.brand;
+    for(const r of data.records){ if(r.id!==id&&(r.brewery||r.brand)===key){ r.lat=rec.lat; r.lng=rec.lng; } }
   }
   if(isNew) data.records.push(rec);
   else data.records=data.records.map(r=>r.id===id?rec:r);
   saveData();
+  if(map&&$('mapModal').classList.contains('open')) drawMapLayer();
   if(pendingPhoto){ try{ await photoPut(id,pendingPhoto); photoInvalidate(id); }catch(e){ showStatus('写真の保存に失敗（容量不足の可能性）'); } }
   if(pendingBack){ try{ await photoPut(id+':b',pendingBack); photoInvalidate(id+':b'); }catch(e){} }
   pendingPhoto=null; pendingBack=null; pendingB64F=null; pendingB64B=null; editingId=null;
   closeModal('formModal');
   renderWall();
-  showStatus(isNew?`「${brand}」を札に掛けました`:`「${brand}」を更新しました`);
+  let msg=isNew?`「${brand}」を札に掛けました`:`「${brand}」を更新しました`;
+  if(isNew||addrChanged){
+    if(geoSrc==='addr') msg+='。地図の位置を住所から更新しました';
+    else if(geoSrc==='pref') msg+='。住所が特定できず県庁所在地に仮置き（地図の📍で修正可）';
+  }
+  showStatus(msg);
 });
 
 $('fDelete').addEventListener('click',async()=>{
