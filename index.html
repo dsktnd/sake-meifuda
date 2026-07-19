@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#26211c">
+<title>酒銘札</title>
+<style>
+:root{
+  --wall:#26211c; --wall2:#2e2820;
+  --paper:#f2e8d5; --paper2:#e9dcc3;
+  --ink:#2b2118; --ink-soft:#6b5d4a;
+  --shu:#b5442c; --ai:#2f5f9e;
+  --serif:"Hiragino Mincho ProN","Yu Mincho","YuMincho",serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:var(--serif); color:var(--paper); background:
+    radial-gradient(ellipse at 30% 0%, rgba(255,240,200,.05), transparent 60%),
+    repeating-linear-gradient(90deg, var(--wall) 0 90px, var(--wall2) 90px 92px, var(--wall) 92px 180px),
+    var(--wall);
+  min-height:100dvh; padding-bottom:calc(90px + env(safe-area-inset-bottom));
+}
+header{
+  display:flex; align-items:baseline; gap:12px;
+  padding:calc(10px + env(safe-area-inset-top)) 14px 6px;
+}
+header h1{font-size:22px; font-weight:600; letter-spacing:.35em}
+header .ver{font-size:10px; color:#9a8c74; letter-spacing:.1em}
+header .sp{flex:1}
+header button{
+  font-family:var(--serif); background:none; border:1px solid #5a4f3e; color:var(--paper);
+  border-radius:4px; padding:5px 10px; font-size:13px; letter-spacing:.15em;
+}
+.toolbar{display:flex; gap:8px; padding:6px 14px 12px; align-items:center}
+.toolbar input[type=search]{
+  flex:1; min-width:0; font-family:var(--serif); font-size:14px; padding:6px 10px;
+  background:rgba(0,0,0,.25); border:1px solid #4a4132; border-radius:4px; color:var(--paper);
+}
+.toolbar select{
+  font-family:var(--serif); font-size:13px; padding:6px 6px;
+  background:rgba(0,0,0,.25); border:1px solid #4a4132; border-radius:4px; color:var(--paper);
+}
+.count{font-size:11px; color:#9a8c74; white-space:nowrap}
+
+/* ---- 短冊札 ---- */
+#wall{display:grid; grid-template-columns:repeat(auto-fill, minmax(86px,1fr)); gap:14px 10px; padding:4px 14px}
+.fuda{
+  position:relative; height:238px; display:flex; flex-direction:column; align-items:center;
+  background:linear-gradient(175deg, #f6eddc, var(--paper) 30%, var(--paper2));
+  color:var(--ink); border-radius:3px; padding:16px 4px 6px;
+  box-shadow:0 5px 9px rgba(0,0,0,.45), inset 0 0 18px rgba(120,90,40,.12);
+  transform:rotate(var(--rot,0deg)); transform-origin:top center;
+}
+.fuda .hole{
+  position:absolute; top:6px; left:50%; transform:translateX(-50%);
+  width:7px; height:7px; border-radius:50%; background:var(--wall);
+  box-shadow:inset 0 1px 1px rgba(0,0,0,.7), 0 0 0 2px #d9caac;
+}
+.fuda .fname{
+  writing-mode:vertical-rl; text-orientation:mixed; flex:1;
+  font-weight:600; letter-spacing:.14em; line-height:1.1;
+  display:flex; align-items:center; overflow:hidden; max-height:150px;
+}
+.fuda .fphoto{
+  width:56px; height:56px; border-radius:2px; overflow:hidden; margin-top:6px;
+  background:#ddd0b5; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); flex:none;
+}
+.fuda .fphoto img{width:100%; height:100%; object-fit:cover; display:block}
+.fuda .fphoto .noimg{display:flex; align-items:center; justify-content:center; height:100%; font-size:20px; color:#b3a486}
+.fuda .fstars{font-size:10px; color:var(--shu); letter-spacing:.05em; margin-top:4px; height:12px}
+.fuda .fpref{position:absolute; top:16px; left:5px; writing-mode:vertical-rl; font-size:9px; color:var(--ink-soft); letter-spacing:.2em}
+.empty-wall{grid-column:1/-1; text-align:center; color:#9a8c74; font-size:13px; padding:60px 20px; line-height:2}
+
+/* 記 seal button */
+#seal{
+  position:fixed; right:18px; bottom:calc(18px + env(safe-area-inset-bottom)); z-index:40;
+  width:58px; height:58px; border-radius:8px; border:none;
+  background:var(--shu); color:#f6eddc; font-family:var(--serif); font-size:26px; font-weight:600;
+  box-shadow:0 4px 10px rgba(0,0,0,.5), inset 0 0 0 2px rgba(246,237,220,.55), inset 0 0 0 4px var(--shu);
+}
+#seal:active{transform:scale(.94)}
+
+/* ---- modals ---- */
+.modal{
+  position:fixed; inset:0; z-index:50; display:none; overflow-y:auto;
+  background:rgba(15,12,8,.82); -webkit-overflow-scrolling:touch;
+  padding:calc(16px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom));
+}
+.modal.open{display:block}
+.panel{
+  max-width:520px; margin:0 auto; background:var(--paper); color:var(--ink);
+  border-radius:6px; padding:18px 16px 20px; box-shadow:0 10px 30px rgba(0,0,0,.6);
+}
+.panel h2{font-size:16px; letter-spacing:.25em; border-bottom:2px solid var(--ink); padding-bottom:8px; margin-bottom:14px; display:flex; align-items:center}
+.panel h2 .sp{flex:1}
+.panel h2 button{border:none; background:none; font-size:20px; color:var(--ink); font-family:var(--serif)}
+.frow{margin-bottom:12px}
+.frow label{display:block; font-size:11px; color:var(--ink-soft); letter-spacing:.2em; margin-bottom:4px}
+.frow input[type=text],.frow input[type=date],.frow input[type=password],.frow select,.frow textarea{
+  width:100%; font-family:var(--serif); font-size:15px; padding:8px 9px;
+  border:1px solid #c3b394; border-radius:4px; background:#faf5ea; color:var(--ink);
+}
+.frow textarea{min-height:64px; resize:vertical}
+.frow .hint{font-size:10px; color:var(--ink-soft); margin-top:3px; line-height:1.6}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:0 10px}
+.photo-prev{width:100%; max-height:220px; object-fit:contain; border-radius:4px; background:#e6dabf; display:block; margin-bottom:8px}
+.backrow{display:flex; gap:8px; align-items:center; margin-bottom:10px}
+#fBackPrev{width:52px; height:52px; object-fit:cover; border-radius:3px; background:#e6dabf; flex:none}
+.pvhint{font-size:10px; color:var(--ink-soft); letter-spacing:.1em; margin-bottom:4px}
+#aiStatus{font-size:12px; color:var(--ai); min-height:18px; margin-bottom:8px; line-height:1.6}
+#aiStatus.err{color:var(--shu)}
+.stars-in{font-size:30px; letter-spacing:6px; color:#c9b992; user-select:none}
+.stars-in .on{color:var(--shu)}
+.seg{display:flex; gap:4px}
+.seg button{
+  flex:1; font-family:var(--serif); font-size:11px; padding:8px 0; border:1px solid #c3b394;
+  background:#faf5ea; color:var(--ink-soft); border-radius:4px;
+}
+.seg button.on{background:var(--shu); border-color:var(--shu); color:#f6eddc}
+.btnrow{display:flex; gap:8px; margin-top:16px}
+.btn{
+  flex:1; font-family:var(--serif); font-size:15px; letter-spacing:.3em; padding:11px 0;
+  border-radius:4px; border:1px solid var(--ink); background:none; color:var(--ink);
+}
+.btn.primary{background:var(--ink); color:var(--paper)}
+.btn.danger{border-color:var(--shu); color:var(--shu); flex:0 0 auto; padding:11px 14px; letter-spacing:.1em}
+.btn.small{font-size:12px; padding:7px 0; letter-spacing:.15em}
+.status-line{
+  position:fixed; left:12px; right:12px; bottom:calc(88px + env(safe-area-inset-bottom)); z-index:60;
+  background:var(--ink); color:var(--paper); font-size:13px; padding:10px 12px; border-radius:6px;
+  display:none; align-items:center; gap:10px; box-shadow:0 4px 12px rgba(0,0,0,.5);
+}
+.status-line.show{display:flex}
+.status-line .sp{flex:1}
+.status-line button{font-family:var(--serif); background:none; border:1px solid var(--paper); color:var(--paper); border-radius:4px; padding:4px 10px; font-size:12px}
+
+/* detail */
+#dPhoto{width:100%; max-height:300px; object-fit:contain; border-radius:4px; background:#e6dabf; margin-bottom:12px}
+.d-name{font-size:24px; font-weight:600; letter-spacing:.1em}
+.d-kana{font-size:11px; color:var(--ink-soft); letter-spacing:.3em; margin-bottom:6px}
+.d-stars{color:var(--shu); font-size:18px; letter-spacing:3px; margin-bottom:10px}
+.d-table{width:100%; border-collapse:collapse; font-size:13px; margin-bottom:10px}
+.d-table th{width:5.5em; text-align:left; color:var(--ink-soft); font-weight:400; padding:5px 0; letter-spacing:.15em; vertical-align:top}
+.d-table td{padding:5px 0}
+.d-memo{font-size:13px; background:#faf5ea; border-radius:4px; padding:10px; white-space:pre-wrap; line-height:1.7}
+
+/* map: フルウィンドウ表示 */
+#mapModal{padding:0}
+#mapPanel{
+  max-width:none; width:100%; height:100dvh; margin:0; border-radius:0;
+  display:flex; flex-direction:column;
+  padding:calc(10px + env(safe-area-inset-top)) 12px calc(10px + env(safe-area-inset-bottom));
+}
+#mapPanel h2{margin-bottom:10px}
+#map{flex:1; min-height:0; border-radius:4px; background:#dfe6ea}
+.map-toggle{display:flex; gap:6px; margin-bottom:10px}
+.map-toggle button{flex:1; font-family:var(--serif); font-size:13px; padding:8px 0; border:1px solid var(--ink); background:none; color:var(--ink); border-radius:4px; letter-spacing:.2em}
+.map-toggle button.on{background:var(--ink); color:var(--paper)}
+#pinFixBar{display:none; margin-top:10px; font-size:12px; line-height:1.7}
+
+/* stats */
+.tiles{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px}
+.tile{background:#faf5ea; border-radius:4px; padding:10px 4px; text-align:center}
+.tile .v{font-size:20px; font-weight:600}
+.tile .k{font-size:9px; color:var(--ink-soft); letter-spacing:.2em; margin-top:2px}
+.chart{margin-bottom:18px}
+.chart h3{font-size:12px; letter-spacing:.3em; color:var(--ink-soft); margin-bottom:8px}
+.hbar{display:flex; align-items:center; gap:8px; margin-bottom:5px; font-size:12px}
+.hbar .lbl{width:5.5em; text-align:right; color:var(--ink); white-space:nowrap; overflow:hidden}
+.hbar .track{flex:1; height:14px; display:flex; align-items:center}
+.hbar .bar{height:14px; border-radius:0 4px 4px 0; min-width:2px}
+.hbar .num{font-size:11px; color:var(--ink-soft); width:2em}
+.taste-grid{display:grid; grid-template-columns:auto repeat(5,1fr); gap:2px; font-size:9px; align-items:stretch}
+.taste-grid .axis{display:flex; align-items:center; justify-content:center; color:var(--ink-soft); padding:2px}
+.taste-grid .cell{aspect-ratio:1.4; display:flex; align-items:center; justify-content:center; background:#faf5ea; border-radius:2px; font-size:11px; color:var(--ink)}
+.taste-note{font-size:10px; color:var(--ink-soft); margin-top:6px; line-height:1.6}
+
+@media (min-width:700px){ #wall{grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); max-width:900px; margin:0 auto} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>酒銘札</h1><span class="ver">v1.4</span>
+  <span class="sp"></span>
+  <button id="btnMap">地図</button>
+  <button id="btnStats">集計</button>
+  <button id="btnCfg">⚙</button>
+</header>
+<div class="toolbar">
+  <input type="search" id="q" placeholder="銘柄・蔵元・県で検索">
+  <select id="sort">
+    <option value="date">新しい順</option>
+    <option value="stars">評価順</option>
+    <option value="name">銘柄順</option>
+  </select>
+  <span class="count" id="count"></span>
+</div>
+
+<div id="wall"></div>
+
+<button id="seal" aria-label="記録する">記</button>
+<input type="file" id="file" accept="image/*" hidden>
+<input type="file" id="fileBack" accept="image/*" hidden>
+
+<div class="status-line" id="statusLine"><span id="statusMsg"></span><span class="sp"></span><button id="undoBtn">元に戻す</button></div>
+
+<!-- ══ 記入 ══ -->
+<div class="modal" id="formModal"><div class="panel">
+  <h2><span id="formTitle">一献を記す</span><span class="sp"></span><button data-close>×</button></h2>
+  <div class="pvhint">表ラベル（図鑑の顔・保存用）</div>
+  <img id="fPhotoPrev" class="photo-prev" hidden>
+  <div class="backrow">
+    <img id="fBackPrev" hidden>
+    <button type="button" class="btn small" id="pfAdd">表写真</button>
+    <button type="button" class="btn small" id="bkAdd">裏写真(読取用)</button>
+    <button type="button" class="btn small" id="readBtn">読み取り</button>
+  </div>
+  <div id="aiStatus"></div>
+  <div class="frow"><label>銘柄（必須）</label><input type="text" id="fBrand" autocomplete="off"></div>
+  <div class="grid2">
+    <div class="frow"><label>よみ</label><input type="text" id="fKana" autocomplete="off"></div>
+    <div class="frow"><label>飲んだ日</label><input type="date" id="fDate"></div>
+  </div>
+  <div class="grid2">
+    <div class="frow"><label>蔵元</label><input type="text" id="fBrewery" autocomplete="off"></div>
+    <div class="frow"><label>都道府県</label><select id="fPref"></select></div>
+  </div>
+  <div class="frow"><label>蔵元住所（地図ピン用）</label><input type="text" id="fAddress" autocomplete="off">
+    <div class="hint">AI推定は誤ることがあります。保存時に座標化し、地図でピンを直せます。</div></div>
+  <div class="grid2">
+    <div class="frow"><label>特定名称</label><input type="text" id="fSpec" list="specList" autocomplete="off">
+      <datalist id="specList"><option>純米大吟醸酒</option><option>純米吟醸酒</option><option>特別純米酒</option><option>純米酒</option><option>大吟醸酒</option><option>吟醸酒</option><option>特別本醸造酒</option><option>本醸造酒</option><option>普通酒</option></datalist></div>
+    <div class="frow"><label>精米歩合</label><input type="text" id="fPolish" placeholder="50%" autocomplete="off"></div>
+  </div>
+  <div class="frow"><label>酒米</label><input type="text" id="fRice" list="riceList" autocomplete="off">
+    <datalist id="riceList"><option>山田錦</option><option>五百万石</option><option>美山錦</option><option>雄町</option><option>愛山</option><option>出羽燦々</option><option>雪女神</option><option>八反錦</option><option>亀の尾</option><option>秋田酒こまち</option><option>越淡麗</option><option>山恵錦</option><option>吟風</option><option>祝</option><option>強力</option></datalist></div>
+  <div class="frow"><label>評価</label><div class="stars-in" id="fStars"></div></div>
+  <div class="frow"><label>甘辛</label><div class="seg" id="fSweet"></div></div>
+  <div class="frow"><label>香り</label><div class="seg" id="fAroma"></div></div>
+  <div class="frow"><label>味メモ</label><textarea id="fMemo"></textarea></div>
+  <div class="btnrow">
+    <button class="btn danger" id="fDelete" hidden>削除</button>
+    <button class="btn primary" id="fSave">保存</button>
+  </div>
+</div></div>
+
+<!-- ══ 詳細 ══ -->
+<div class="modal" id="detailModal"><div class="panel">
+  <h2><span>銘札</span><span class="sp"></span><button data-close>×</button></h2>
+  <img id="dPhoto" hidden>
+  <img id="dPhotoB" hidden style="width:100%;max-height:220px;object-fit:contain;border-radius:4px;background:#e6dabf;margin-bottom:12px">
+  <div class="d-name" id="dName"></div>
+  <div class="d-kana" id="dKana"></div>
+  <div class="d-stars" id="dStars"></div>
+  <table class="d-table" id="dTable"></table>
+  <div class="d-memo" id="dMemo" hidden></div>
+  <div class="btnrow">
+    <button class="btn" id="dMap">地図で見る</button>
+    <button class="btn primary" id="dEdit">編集</button>
+  </div>
+</div></div>
+
+<!-- ══ 地図 ══ -->
+<div class="modal" id="mapModal"><div class="panel" id="mapPanel">
+  <h2><span>蔵元の地図</span><span class="sp"></span><button data-close>×</button></h2>
+  <div class="map-toggle">
+    <button id="mtPins" class="on">蔵元ピン</button>
+    <button id="mtPref">県別集計</button>
+  </div>
+  <div id="map"></div>
+  <div id="pinFixBar">📍 <b id="pinFixName"></b> のピンをドラッグで修正できます。<button class="btn small" id="pinFixDone" style="margin-top:6px">修正を保存して終了</button></div>
+</div></div>
+
+<!-- ══ 集計 ══ -->
+<div class="modal" id="statsModal"><div class="panel">
+  <h2><span>好みの集計</span><span class="sp"></span><button data-close>×</button></h2>
+  <div id="statsBody"></div>
+</div></div>
+
+<!-- ══ 設定 ══ -->
+<div class="modal" id="cfgModal"><div class="panel">
+  <h2><span>設定</span><span class="sp"></span><button data-close>×</button></h2>
+  <div class="frow"><label>Anthropic APIキー（ラベル自動読み取り用）</label>
+    <input type="password" id="cKey" placeholder="sk-ant-...">
+    <div class="hint">この端末のブラウザ内にのみ保存されます。読み取り時にラベル写真がAnthropic APIへ送信されます（従量課金）。未設定でも手入力で使えます。</div></div>
+  <div class="frow"><label>読み取りモデル</label>
+    <input type="text" id="cModel" placeholder="claude-haiku-4-5">
+    <div class="hint">既定 claude-haiku-4-5（写真1枚1円未満目安）。精度が足りなければ claude-opus-4-8 に変更（1枚数円）。</div></div>
+  <div class="btnrow"><button class="btn primary" id="cSave">設定を保存</button></div>
+  <div class="frow" style="margin-top:22px"><label>バックアップ</label>
+    <div class="btnrow" style="margin-top:4px">
+      <button class="btn small" id="cExport">書き出し（写真込みJSON）</button>
+      <button class="btn small" id="cImport">読み込み</button>
+    </div>
+    <div class="hint">機種変更・データ移行時に使用。書き出したファイルを新端末で読み込むと全記録と写真が復元されます。</div>
+    <input type="file" id="importFile" accept="application/json" hidden>
+  </div>
+</div></div>
+
+<script>
+'use strict';
+/* ================= 定数 ================= */
+const LS_DATA='meifuda:data', LS_CFG='meifuda:cfg';
+const PREFS=["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
+const PREF_LL={"北海道":[43.06,141.35],"青森県":[40.82,140.74],"岩手県":[39.70,141.15],"宮城県":[38.27,140.87],"秋田県":[39.72,140.10],"山形県":[38.24,140.36],"福島県":[37.75,140.47],"茨城県":[36.34,140.45],"栃木県":[36.57,139.88],"群馬県":[36.39,139.06],"埼玉県":[35.86,139.65],"千葉県":[35.61,140.12],"東京都":[35.69,139.69],"神奈川県":[35.45,139.64],"新潟県":[37.90,139.02],"富山県":[36.70,137.21],"石川県":[36.59,136.63],"福井県":[36.07,136.22],"山梨県":[35.66,138.57],"長野県":[36.65,138.18],"岐阜県":[35.39,136.72],"静岡県":[34.98,138.38],"愛知県":[35.18,136.91],"三重県":[34.73,136.51],"滋賀県":[35.00,135.87],"京都府":[35.02,135.76],"大阪府":[34.69,135.52],"兵庫県":[34.69,135.18],"奈良県":[34.69,135.83],"和歌山県":[34.23,135.17],"鳥取県":[35.50,134.24],"島根県":[35.47,133.05],"岡山県":[34.66,133.93],"広島県":[34.40,132.46],"山口県":[34.19,131.47],"徳島県":[34.07,134.56],"香川県":[34.34,134.04],"愛媛県":[33.84,132.77],"高知県":[33.56,133.53],"福岡県":[33.61,130.42],"佐賀県":[33.25,130.30],"長崎県":[32.74,129.87],"熊本県":[32.79,130.74],"大分県":[33.24,131.61],"宮崎県":[31.91,131.42],"鹿児島県":[31.56,130.56],"沖縄県":[26.21,127.68]};
+const SWEET_LBL=["甘口","やや甘","中間","やや辛","辛口"];
+const AROMA_LBL=["控えめ","やや控","中間","やや華","華やか"];
+const SHU='#b5442c', AI='#2f5f9e';
+
+/* ================= 状態 ================= */
+let data=loadJSON(LS_DATA)||{v:1,records:[]};
+let cfg=Object.assign({apiKey:'',model:'claude-haiku-4-5'},loadJSON(LS_CFG)||{});
+let editingId=null;          // 編集中レコードid（新規はnull）
+let pendingPhoto=null;       // 保存待ちの表写真Blob
+let pendingBack=null;        // 保存待ちの裏写真Blob（IndexedDBキーは id+':b'）
+let pendingB64F=null, pendingB64B=null; // AI読み取り用base64
+let pendingGeo=null;         // AI読み取りで得た {lat,lng}
+let starsVal=0, sweetVal=0, aromaVal=0;
+const urlCache=new Map();    // id -> objectURL
+let undoFn=null, undoTimer=null;
+
+function loadJSON(k){ try{return JSON.parse(localStorage.getItem(k))}catch(e){return null} }
+function saveData(){ localStorage.setItem(LS_DATA,JSON.stringify(data)); }
+function saveCfg(){ localStorage.setItem(LS_CFG,JSON.stringify(cfg)); }
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const genId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ================= IndexedDB（写真） ================= */
+let dbp=null;
+function idb(){
+  if(dbp) return dbp;
+  dbp=new Promise((res,rej)=>{
+    const r=indexedDB.open('meifuda',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('photos');
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+  return dbp;
+}
+async function photoPut(id,blob){ const db=await idb(); return new Promise((res,rej)=>{const t=db.transaction('photos','readwrite'); t.objectStore('photos').put(blob,id); t.oncomplete=res; t.onerror=()=>rej(t.error);}); }
+async function photoGet(id){ const db=await idb(); return new Promise((res,rej)=>{const r=db.transaction('photos').objectStore('photos').get(id); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);}); }
+async function photoDel(id){ const db=await idb(); return new Promise((res,rej)=>{const t=db.transaction('photos','readwrite'); t.objectStore('photos').delete(id); t.oncomplete=res; t.onerror=()=>rej(t.error);}); }
+async function photoURL(id){
+  if(urlCache.has(id)) return urlCache.get(id);
+  const b=await photoGet(id); if(!b) return null;
+  const u=URL.createObjectURL(b); urlCache.set(id,u); return u;
+}
+function photoInvalidate(id){ const u=urlCache.get(id); if(u){URL.revokeObjectURL(u); urlCache.delete(id);} }
+
+/* ================= Exif（撮影日）と TIFF/DNG 解析 ================= */
+function tiffDate(v,t){
+  const le=v.getUint16(t)===0x4949;
+  const g16=p=>v.getUint16(t+p,le), g32=p=>v.getUint32(t+p,le);
+  const readAscii=(off,cnt)=>{let s='';for(let j=0;j<cnt-1;j++){const c=v.getUint8(t+off+j);if(!c)break;s+=String.fromCharCode(c);}return s;};
+  const scanIFD=(ifd,tags)=>{
+    const out={}; if(ifd<=0||t+ifd+2>v.byteLength) return out;
+    const n=g16(ifd); if(!n||n>512) return out;
+    for(let i=0;i<n;i++){
+      const e=ifd+2+i*12, tag=g16(e);
+      if(tags.includes(tag)){
+        const cnt=g32(e+4);
+        out[tag]=readAscii(cnt>4?g32(e+8):e+8,cnt); // eはTIFF相対。日付は20byteで常にオフセット形式
+      }
+      if(tag===0x8769) out.exifPtr=g32(e+8);
+    }
+    return out;
+  };
+  const ifd0=scanIFD(g32(4),[0x0132]);
+  let ds=null;
+  if(ifd0.exifPtr){ const ex=scanIFD(ifd0.exifPtr,[0x9003,0x9004]); ds=ex[0x9003]||ex[0x9004]; }
+  ds=ds||ifd0[0x0132];
+  if(ds){ const m=ds.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m) return `${m[1]}-${m[2]}-${m[3]}`; }
+  return null;
+}
+function exifDate(buf){
+  try{
+    const v=new DataView(buf);
+    const mg=v.getUint16(0);
+    if(mg===0x4949||mg===0x4D4D) return tiffDate(v,0);  // TIFF / DNG(RAW)
+    if(mg!==0xFFD8) return null;                         // JPEG以外
+    let o=2;
+    while(o+4<v.byteLength){
+      if(v.getUint8(o)!==0xFF) break;
+      const marker=v.getUint8(o+1), size=v.getUint16(o+2);
+      if(marker===0xE1 && v.getUint32(o+4)===0x45786966) return tiffDate(v,o+10); // "Exif"
+      o+=2+size;
+    }
+  }catch(e){}
+  return null;
+}
+// DNG/TIFF内の埋め込みJPEGプレビューを取り出す（ブラウザはRAW本体をデコードできないため）
+function dngPreview(buf){
+  try{
+    const v=new DataView(buf);
+    const mg=v.getUint16(0);
+    if(mg!==0x4949&&mg!==0x4D4D) return null;
+    const le=mg===0x4949;
+    const g16=p=>v.getUint16(p,le), g32=p=>v.getUint32(p,le);
+    if(g16(2)!==42) return null;
+    const tsize={1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8,11:4,12:8};
+    const cands=[], seen=new Set();
+    const walk=(ifd,depth)=>{
+      if(!ifd||ifd+2>v.byteLength||seen.has(ifd)||depth>8) return;
+      seen.add(ifd);
+      const n=g16(ifd); if(!n||n>512) return;
+      const tagv={};
+      for(let i=0;i<n;i++){
+        const e=ifd+2+i*12;
+        tagv[g16(e)]={type:g16(e+2),cnt:g32(e+4),valOff:e+8};
+      }
+      const val=(tv,i)=>{
+        const sz=tsize[tv.type]||1;
+        const base=(sz*tv.cnt<=4)?tv.valOff:g32(tv.valOff);
+        const p=base+i*sz;
+        return tv.type===3?g16(p):g32(p);
+      };
+      // 旧式サムネイル (JPEGInterchangeFormat)
+      if(tagv[0x0201]&&tagv[0x0202]) cands.push({off:val(tagv[0x0201],0),len:val(tagv[0x0202],0)});
+      // JPEG圧縮ストリップのプレビューIFD (Compression=6/7)
+      if(tagv[0x0103]&&tagv[0x0111]&&tagv[0x0117]&&tagv[0x0111].cnt===1){
+        const comp=val(tagv[0x0103],0);
+        if(comp===6||comp===7) cands.push({off:val(tagv[0x0111],0),len:val(tagv[0x0117],0)});
+      }
+      // SubIFD群を再帰探索
+      if(tagv[0x014A]) for(let i=0;i<Math.min(tagv[0x014A].cnt,16);i++) walk(val(tagv[0x014A],i),depth+1);
+      walk(g32(ifd+2+n*12),depth+1); // 次のIFD
+    };
+    walk(g32(4),0);
+    let best=null;
+    for(const c of cands){
+      if(c.off>0&&c.len>1000&&c.off+c.len<=v.byteLength&&v.getUint16(c.off)===0xFFD8&&(!best||c.len>best.len)) best=c;
+    }
+    if(best) return new Blob([buf.slice(best.off,best.off+best.len)],{type:'image/jpeg'});
+  }catch(e){}
+  return null;
+}
+
+/* ================= 画像縮小 ================= */
+function resizeImage(file,max=1280,q=0.82){
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    const u=URL.createObjectURL(file);
+    img.onload=()=>{
+      const sc=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+      const w=Math.round(img.naturalWidth*sc), h=Math.round(img.naturalHeight*sc);
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(u);
+      cv.toBlob(b=>b?res(b):rej(new Error('toBlob failed')),'image/jpeg',q);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(u); rej(new Error('image load failed'));};
+    img.src=u;
+  });
+}
+let heicReady=null;
+function loadHeic(){
+  if(heicReady) return heicReady;
+  heicReady=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js';
+    s.onload=res; s.onerror=()=>{heicReady=null; rej(new Error('変換ライブラリの読み込みに失敗（要ネット接続）'));};
+    document.head.appendChild(s);
+  });
+  return heicReady;
+}
+const blobToB64=b=>new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(b);});
+const blobToDataURL=b=>new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(b);});
+function dataURLToBlob(du){ const [h,b64]=du.split(','); const mime=h.match(/:(.*?);/)[1]; const bin=atob(b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }
+
+/* ================= Claude API ラベル読み取り ================= */
+const LABEL_SCHEMA={type:'object',additionalProperties:false,
+  required:['brand','kana','brewery','pref','address','spec','polish','rice','note'],
+  properties:{
+    brand:{type:'string',description:'銘柄名（商品名の主要部）'},
+    kana:{type:'string',description:'銘柄のよみがな（ひらがな）'},
+    brewery:{type:'string',description:'蔵元・製造者名'},
+    pref:{type:'string',description:'蔵元の都道府県（例: 山形県）'},
+    address:{type:'string',description:'蔵元の住所。ラベルに無ければ知識で補完可（不確かなら市区町村まで）'},
+    spec:{type:'string',description:'特定名称（純米大吟醸酒など）'},
+    polish:{type:'string',description:'精米歩合（例: 50%）'},
+    rice:{type:'string',description:'原料米・酒米の品種（例: 山田錦）。複数なら「山田錦・雄町」のように併記'},
+    note:{type:'string',description:'その他ラベルから読める特記（酵母・度数・生酛など）'}
+  }};
+async function readLabel(b64s){
+  let res;
+  try{
+  res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'content-type':'application/json',
+      'x-api-key':cfg.apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:cfg.model||'claude-haiku-4-5',
+      max_tokens:1024,
+      output_config:{format:{type:'json_schema',schema:LABEL_SCHEMA}},
+      messages:[{role:'user',content:[
+        ...b64s.map(b=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b}})),
+        {type:'text',text:'これは日本酒のラベル写真です（裏ラベル・表ラベルの1〜2枚。裏ラベルに詳細情報が載っていることが多い）。読み取れる情報を統合して抽出してください。蔵元の住所はラベルに無くてもあなたの知識で補完して構いません（不確かなら都道府県＋市区町村まで）。判読できない項目は空文字にしてください。'}
+      ]}]
+    })
+  });
+  }catch(e){
+    throw new Error('APIへの接続に失敗（ネット接続を確認。file://で開いている場合はブラウザがブロックすることがあります→Safariで試すか公開後のURLで）');
+  }
+  if(!res.ok){
+    let msg=`HTTP ${res.status}`;
+    try{ const j=await res.json(); msg=`${j.error?.type||''} ${j.error?.message||''}`.trim()||msg; }catch(e){}
+    if(res.status===401) msg='APIキーが無効です（⚙設定を確認）';
+    if(res.status===429) msg='レート制限中です。少し待って再試行してください';
+    throw new Error(msg);
+  }
+  const j=await res.json();
+  if(j.stop_reason==='refusal') throw new Error('読み取りが拒否されました');
+  const txt=(j.content||[]).find(b=>b.type==='text')?.text||'';
+  try{ return JSON.parse(txt); }
+  catch(e){ const m=txt.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('応答の解析に失敗'); }
+}
+
+/* ================= 地理院ジオコーディング ================= */
+async function geocode(addr,pref){
+  if(addr){
+    try{
+      const r=await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(addr));
+      const a=await r.json();
+      if(Array.isArray(a)&&a.length){ const [lng,lat]=a[0].geometry.coordinates; return {lat,lng,src:'addr'}; }
+    }catch(e){}
+  }
+  if(pref&&PREF_LL[pref]){ const [lat,lng]=PREF_LL[pref]; return {lat,lng,src:'pref'}; }
+  return null;
+}
+
+/* ================= 壁（一覧）描画 ================= */
+function rotFor(id){ let h=0; for(const c of id) h=(h*31+c.charCodeAt(0))>>>0; return ((h%40)-20)/12; }
+function starsStr(n){ return n?('★'.repeat(n)+'☆'.repeat(5-n)):''; }
+function currentList(){
+  const q=$('q').value.trim().toLowerCase();
+  let list=data.records.slice();
+  if(q) list=list.filter(r=>[r.brand,r.kana,r.brewery,r.pref,r.memo,r.spec,r.rice].some(v=>(v||'').toLowerCase().includes(q)));
+  const sort=$('sort').value;
+  if(sort==='stars') list.sort((a,b)=>(b.stars||0)-(a.stars||0)||(b.date||'').localeCompare(a.date||''));
+  else if(sort==='name') list.sort((a,b)=>(a.kana||a.brand||'').localeCompare(b.kana||b.brand||'','ja'));
+  else list.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.createdAt||0)-(a.createdAt||0));
+  return list;
+}
+async function renderWall(){
+  const list=currentList();
+  $('count').textContent=`${data.records.length}本`;
+  const wall=$('wall');
+  if(!list.length){
+    wall.innerHTML=`<div class="empty-wall">まだ札がありません。<br>右下の「記」からラベル写真を撮って一献を記しましょう。</div>`;
+    return;
+  }
+  wall.innerHTML=list.map(r=>{
+    const nm=esc(r.brand||'銘柄未記入');
+    const fs=nm.length>8?13:nm.length>5?16:19;
+    return `<div class="fuda" data-id="${r.id}" style="--rot:${rotFor(r.id)}deg">
+      <div class="hole"></div>
+      ${r.pref?`<div class="fpref">${esc(r.pref.replace(/[都府県]$/,''))}</div>`:''}
+      <div class="fname" style="font-size:${fs}px">${nm}</div>
+      <div class="fphoto" id="ph-${r.id}"><div class="noimg">酒</div></div>
+      <div class="fstars">${starsStr(r.stars)}</div>
+    </div>`;
+  }).join('');
+  wall.querySelectorAll('.fuda').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+  for(const r of list){
+    photoURL(r.id).then(u=>{ if(u){ const ph=$('ph-'+r.id); if(ph) ph.innerHTML=`<img src="${u}" alt="">`; } });
+  }
+}
+
+/* ================= モーダル共通 ================= */
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('.modal').classList.remove('open')));
+function openModal(id){ $(id).classList.add('open'); }
+function closeModal(id){ $(id).classList.remove('open'); }
+
+/* ================= ステータス行（confirm代替: 即実行＋元に戻す） ================= */
+function showStatus(msg,undo){
+  $('statusMsg').textContent=msg;
+  undoFn=undo||null;
+  $('undoBtn').style.display=undo?'':'none';
+  $('statusLine').classList.add('show');
+  clearTimeout(undoTimer);
+  undoTimer=setTimeout(()=>$('statusLine').classList.remove('show'),8000);
+}
+$('undoBtn').addEventListener('click',()=>{ if(undoFn)undoFn(); undoFn=null; $('statusLine').classList.remove('show'); });
+
+/* ================= 記入フォーム ================= */
+// 都道府県select
+$('fPref').innerHTML='<option value=""></option>'+PREFS.map(p=>`<option>${p}</option>`).join('');
+// 星入力
+function renderStarsIn(){ $('fStars').innerHTML=[1,2,3,4,5].map(i=>`<span data-v="${i}" class="${i<=starsVal?'on':''}">★</span>`).join(''); }
+$('fStars').addEventListener('click',e=>{ const v=+e.target.dataset.v||0; starsVal=(v===starsVal)?0:v; renderStarsIn(); });
+// セグメント入力
+function renderSeg(el,labels,val,setter){
+  el.innerHTML=labels.map((l,i)=>`<button type="button" data-v="${i+1}" class="${val===i+1?'on':''}">${l}</button>`).join('');
+  el.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ const v=+b.dataset.v; setter(v===val?0:v); }));
+}
+function setSweet(v){ sweetVal=v; renderSeg($('fSweet'),SWEET_LBL,sweetVal,setSweet); }
+function setAroma(v){ aromaVal=v; renderSeg($('fAroma'),AROMA_LBL,aromaVal,setAroma); }
+
+function openForm(rec,photoBlob){
+  editingId=rec?rec.id:null;
+  pendingPhoto=photoBlob||null;
+  pendingBack=null; pendingB64F=null; pendingB64B=null;
+  pendingGeo=null;
+  $('formTitle').textContent=rec?'銘札を直す':'一献を記す';
+  $('fBrand').value=rec?.brand||''; $('fKana').value=rec?.kana||'';
+  $('fBrewery').value=rec?.brewery||''; $('fPref').value=rec?.pref||'';
+  $('fAddress').value=rec?.address||''; $('fSpec').value=rec?.spec||'';
+  $('fPolish').value=rec?.polish||''; $('fRice').value=rec?.rice||'';
+  $('fMemo').value=rec?.memo||'';
+  $('fDate').value=rec?.date||fmtDate(new Date());
+  starsVal=rec?.stars||0; renderStarsIn();
+  setSweet(rec?.sweet||0); setAroma(rec?.aroma||0);
+  $('fDelete').hidden=!rec;
+  $('aiStatus').textContent=''; $('aiStatus').classList.remove('err');
+  const prev=$('fPhotoPrev');
+  if(photoBlob){ prev.src=URL.createObjectURL(photoBlob); prev.hidden=false; }
+  else if(rec){ prev.hidden=true; photoURL(rec.id).then(u=>{ if(u&&editingId===rec.id){prev.src=u; prev.hidden=false;} }); }
+  else prev.hidden=true;
+  const bprev=$('fBackPrev'); bprev.hidden=true;
+  if(rec){ photoURL(rec.id+':b').then(u=>{ if(u&&editingId===rec.id){bprev.src=u; bprev.hidden=false;} }); }
+  openModal('formModal');
+}
+
+/* 写真1枚をデコード・縮小・base64化（HEIC変換/DNGプレビュー抽出込み） */
+async function prepPhoto(file){
+  let buf=null;
+  try{ buf=await file.arrayBuffer(); }catch(e){}
+  const date=buf?exifDate(buf):null;
+  let blob;
+  try{ blob=await resizeImage(file); }
+  catch(err){
+    if(/hei[cf]/i.test((file.type||'')+file.name)){
+      showStatus('HEIC写真を変換しています…');
+      await loadHeic();
+      const conv=await heic2any({blob:file,toType:'image/jpeg',quality:0.9});
+      blob=await resizeImage(Array.isArray(conv)?conv[0]:conv);
+      $('statusLine').classList.remove('show');
+    }else{
+      const prev=buf?dngPreview(buf):null;
+      if(!prev) throw new Error(`形式:${file.type||'不明'} / ${err.message} — RAWはJPEG書き出しなら確実です`);
+      blob=await resizeImage(prev);
+    }
+  }
+  const b64=await blobToB64(blob);
+  return {blob,b64,date};
+}
+function updateAiHint(){
+  const el=$('aiStatus'); el.classList.remove('err');
+  el.textContent=cfg.apiKey
+    ?'「裏写真(読取用)」を追加すると自動で読み取ります。表だけで読む場合は「読み取り」。'
+    :'⚙設定でAPIキーを登録すると銘柄が自動入力されます。';
+}
+function fillIfEmpty(id,val){ const el=$(id); if(val&&!el.value) el.value=val; }
+async function gatherB64s(){
+  const out=[];
+  let b=pendingB64B, f=pendingB64F;
+  if(!b&&editingId){ const bl=await photoGet(editingId+':b'); if(bl) b=await blobToB64(bl); }
+  if(!f&&editingId){ const bl=await photoGet(editingId); if(bl) f=await blobToB64(bl); }
+  if(b) out.push(b); if(f) out.push(f);
+  return out;
+}
+async function runRead(){
+  const el=$('aiStatus');
+  if(!cfg.apiKey){ updateAiHint(); return; }
+  const imgs=await gatherB64s();
+  if(!imgs.length){ el.textContent='写真がありません'; return; }
+  el.classList.remove('err'); el.textContent='ラベルを読み取っています…';
+  try{
+    const r=await readLabel(imgs);
+    if(!$('formModal').classList.contains('open')) return;
+    fillIfEmpty('fBrand',r.brand); fillIfEmpty('fKana',r.kana);
+    fillIfEmpty('fBrewery',r.brewery);
+    if(r.pref&&PREFS.includes(r.pref)&&!$('fPref').value)$('fPref').value=r.pref;
+    fillIfEmpty('fAddress',r.address); fillIfEmpty('fSpec',r.spec);
+    fillIfEmpty('fPolish',r.polish); fillIfEmpty('fRice',r.rice);
+    fillIfEmpty('fMemo',r.note);
+    el.textContent='読み取り完了。内容を確認・修正して保存してください。';
+    geocode($('fAddress').value,$('fPref').value).then(g=>{ pendingGeo=g; });
+  }catch(err){
+    el.textContent='読み取り失敗（手入力できます）: '+err.message;
+    el.classList.add('err');
+  }
+}
+$('seal').addEventListener('click',()=>$('file').click());
+$('pfAdd').addEventListener('click',()=>$('file').click());
+$('bkAdd').addEventListener('click',()=>$('fileBack').click());
+$('readBtn').addEventListener('click',runRead);
+// 表写真: 新規起点 or 開いているフォームの差し替え
+$('file').addEventListener('change',async e=>{
+  const file=e.target.files[0]; e.target.value='';
+  if(!file) return;
+  let p;
+  try{ p=await prepPhoto(file); }
+  catch(err){ showStatus('写真の処理に失敗（'+err.message+'）'); return; }
+  const formOpen=$('formModal').classList.contains('open');
+  if(formOpen){
+    pendingPhoto=p.blob; pendingB64F=p.b64;
+    const prev=$('fPhotoPrev'); prev.src=URL.createObjectURL(p.blob); prev.hidden=false;
+  }else{
+    openForm(null,p.blob);
+    pendingB64F=p.b64;
+    if(p.date)$('fDate').value=p.date;
+    updateAiHint();
+  }
+});
+// 裏写真: 追加すると自動読み取り
+$('fileBack').addEventListener('change',async e=>{
+  const file=e.target.files[0]; e.target.value='';
+  if(!file) return;
+  const el=$('aiStatus');
+  let p;
+  try{ p=await prepPhoto(file); }
+  catch(err){ el.textContent='裏写真の処理に失敗（'+err.message+'）'; el.classList.add('err'); return; }
+  pendingBack=p.blob; pendingB64B=p.b64;
+  const bprev=$('fBackPrev'); bprev.src=URL.createObjectURL(p.blob); bprev.hidden=false;
+  if(cfg.apiKey) runRead(); else updateAiHint();
+});
+
+$('fSave').addEventListener('click',async()=>{
+  const brand=$('fBrand').value.trim();
+  if(!brand){ $('aiStatus').textContent='銘柄名を入力してください'; $('aiStatus').classList.add('err'); return; }
+  const isNew=!editingId;
+  const id=editingId||genId();
+  const prev=isNew?null:{...data.records.find(r=>r.id===id)};
+  const rec={
+    id, brand,
+    kana:$('fKana').value.trim(), brewery:$('fBrewery').value.trim(),
+    pref:$('fPref').value, address:$('fAddress').value.trim(),
+    spec:$('fSpec').value.trim(), polish:$('fPolish').value.trim(),
+    rice:$('fRice').value.trim(),
+    date:$('fDate').value||fmtDate(new Date()),
+    stars:starsVal, sweet:sweetVal, aroma:aromaVal,
+    memo:$('fMemo').value.trim(),
+    lat:prev?.lat??null, lng:prev?.lng??null,
+    createdAt:prev?.createdAt||Date.now()
+  };
+  // 座標: AI読み取り結果 or 住所変更時に再取得
+  if(pendingGeo){ rec.lat=pendingGeo.lat; rec.lng=pendingGeo.lng; }
+  if(rec.lat==null || (prev&&(prev.address!==rec.address||prev.pref!==rec.pref))){
+    const g=await geocode(rec.address,rec.pref);
+    if(g){ rec.lat=g.lat; rec.lng=g.lng; }
+  }
+  if(isNew) data.records.push(rec);
+  else data.records=data.records.map(r=>r.id===id?rec:r);
+  saveData();
+  if(pendingPhoto){ try{ await photoPut(id,pendingPhoto); photoInvalidate(id); }catch(e){ showStatus('写真の保存に失敗（容量不足の可能性）'); } }
+  if(pendingBack){ try{ await photoPut(id+':b',pendingBack); photoInvalidate(id+':b'); }catch(e){} }
+  pendingPhoto=null; pendingBack=null; pendingB64F=null; pendingB64B=null; editingId=null;
+  closeModal('formModal');
+  renderWall();
+  showStatus(isNew?`「${brand}」を札に掛けました`:`「${brand}」を更新しました`);
+});
+
+$('fDelete').addEventListener('click',async()=>{
+  if(!editingId) return;
+  const id=editingId;
+  const rec=data.records.find(r=>r.id===id);
+  const photo=await photoGet(id), photoB=await photoGet(id+':b');
+  data.records=data.records.filter(r=>r.id!==id);
+  saveData(); await photoDel(id); await photoDel(id+':b');
+  photoInvalidate(id); photoInvalidate(id+':b');
+  closeModal('formModal'); closeModal('detailModal');
+  editingId=null; renderWall();
+  showStatus(`「${rec?.brand||''}」を外しました`,async()=>{
+    data.records.push(rec); saveData();
+    if(photo) await photoPut(id,photo);
+    if(photoB) await photoPut(id+':b',photoB);
+    renderWall();
+  });
+});
+
+/* ================= 詳細 ================= */
+let detailId=null;
+async function openDetail(id){
+  const r=data.records.find(x=>x.id===id); if(!r) return;
+  detailId=id;
+  $('dName').textContent=r.brand;
+  $('dKana').textContent=r.kana||'';
+  $('dStars').textContent=starsStr(r.stars);
+  const rows=[
+    ['蔵元',r.brewery],['産地',r.pref],['特定名称',r.spec],['精米歩合',r.polish],['酒米',r.rice],
+    ['飲んだ日',r.date],
+    ['甘辛',r.sweet?SWEET_LBL[r.sweet-1]:''],['香り',r.aroma?AROMA_LBL[r.aroma-1]:''],
+    ['住所',r.address]
+  ].filter(x=>x[1]);
+  $('dTable').innerHTML=rows.map(([k,v])=>`<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join('');
+  $('dMemo').hidden=!r.memo; $('dMemo').textContent=r.memo||'';
+  const img=$('dPhoto'); img.hidden=true;
+  photoURL(id).then(u=>{ if(u&&detailId===id){img.src=u; img.hidden=false;} });
+  const imgB=$('dPhotoB'); imgB.hidden=true;
+  photoURL(id+':b').then(u=>{ if(u&&detailId===id){imgB.src=u; imgB.hidden=false;} });
+  openModal('detailModal');
+}
+$('dEdit').addEventListener('click',()=>{ const r=data.records.find(x=>x.id===detailId); closeModal('detailModal'); openForm(r,null); });
+$('dMap').addEventListener('click',()=>{ const r=data.records.find(x=>x.id===detailId); closeModal('detailModal'); openMap(r); });
+
+/* ================= 地図 ================= */
+let leafletReady=null, map=null, mapLayer=null, mapMode='pins', fixTarget=null, fixMarker=null;
+function loadLeaflet(){
+  if(leafletReady) return leafletReady;
+  leafletReady=new Promise((res,rej)=>{
+    const css=document.createElement('link'); css.rel='stylesheet';
+    css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const s=document.createElement('script');
+    s.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    s.onload=res; s.onerror=()=>{leafletReady=null; rej(new Error('地図ライブラリの読み込みに失敗（オフライン？）'));};
+    document.head.appendChild(s);
+  });
+  return leafletReady;
+}
+async function openMap(focusRec){
+  openModal('mapModal');
+  try{ await loadLeaflet(); }catch(e){ $('map').innerHTML=`<div style="padding:30px;text-align:center;font-size:13px">${esc(e.message)}</div>`; return; }
+  if(!map){
+    map=L.map('map',{attributionControl:true}).setView([37.5,137.5],5);
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+      {attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',maxZoom:17}).addTo(map);
+  }
+  setTimeout(()=>map.invalidateSize(),80);
+  drawMapLayer();
+  if(focusRec){
+    if(focusRec.lat!=null){ map.setView([focusRec.lat,focusRec.lng],10); startPinFix(focusRec); }
+    else showStatus('この銘柄は座標未取得です（編集で住所を入れると取得します）');
+  }
+}
+function breweryGroups(){
+  const g=new Map();
+  for(const r of data.records){
+    if(r.lat==null) continue;
+    const key=r.brewery||r.brand;
+    if(!g.has(key)) g.set(key,{name:key,lat:r.lat,lng:r.lng,recs:[]});
+    g.get(key).recs.push(r);
+  }
+  return [...g.values()];
+}
+function drawMapLayer(){
+  if(mapLayer){ mapLayer.remove(); mapLayer=null; }
+  mapLayer=L.layerGroup().addTo(map);
+  if(mapMode==='pins'){
+    for(const b of breweryGroups()){
+      const m=L.circleMarker([b.lat,b.lng],{radius:8,color:SHU,weight:2,fillColor:SHU,fillOpacity:.75}).addTo(mapLayer);
+      const list=b.recs.map(r=>`${esc(r.brand)} ${starsStr(r.stars)}`).join('<br>');
+      m.bindPopup(`<b>${esc(b.name)}</b><br>${list}<br><a href="#" data-fix="${esc(b.recs[0].id)}">📍 位置を直す</a>`);
+    }
+    mapLayer.eachLayer(l=>l.on('popupopen',e=>{
+      const a=e.popup.getElement().querySelector('[data-fix]');
+      if(a) a.addEventListener('click',ev=>{ev.preventDefault(); const r=data.records.find(x=>x.id===a.dataset.fix); map.closePopup(); startPinFix(r);});
+    }));
+  }else{
+    const cnt={};
+    for(const r of data.records){ if(r.pref) cnt[r.pref]=(cnt[r.pref]||0)+1; }
+    for(const [pref,n] of Object.entries(cnt)){
+      const [lat,lng]=PREF_LL[pref];
+      L.circleMarker([lat,lng],{radius:7+Math.sqrt(n)*5,color:AI,weight:2,fillColor:AI,fillOpacity:.55})
+        .bindTooltip(`${pref} ${n}本`,{permanent:n>=2,direction:'right',className:'pref-tip'})
+        .addTo(mapLayer);
+    }
+  }
+}
+function startPinFix(rec){
+  if(!rec||rec.lat==null) return;
+  endPinFix(false);
+  fixTarget=rec;
+  $('pinFixName').textContent=rec.brewery||rec.brand;
+  $('pinFixBar').style.display='block';
+  fixMarker=L.marker([rec.lat,rec.lng],{draggable:true}).addTo(map);
+}
+function endPinFix(save){
+  if(fixMarker){
+    if(save&&fixTarget){
+      const {lat,lng}=fixMarker.getLatLng();
+      const key=fixTarget.brewery||fixTarget.brand;
+      let n=0;
+      for(const r of data.records){ if((r.brewery||r.brand)===key){ r.lat=lat; r.lng=lng; n++; } }
+      saveData(); drawMapLayer();
+      showStatus(`「${key}」のピンを修正しました（${n}件）`);
+    }
+    fixMarker.remove(); fixMarker=null;
+  }
+  fixTarget=null; $('pinFixBar').style.display='none';
+}
+$('pinFixDone').addEventListener('click',()=>endPinFix(true));
+$('mtPins').addEventListener('click',()=>{ mapMode='pins'; $('mtPins').classList.add('on'); $('mtPref').classList.remove('on'); endPinFix(false); drawMapLayer(); });
+$('mtPref').addEventListener('click',()=>{ mapMode='pref'; $('mtPref').classList.add('on'); $('mtPins').classList.remove('on'); endPinFix(false); drawMapLayer(); });
+$('btnMap').addEventListener('click',()=>openMap(null));
+
+/* ================= 集計 ================= */
+$('btnStats').addEventListener('click',()=>{ renderStats(); openModal('statsModal'); });
+function renderStats(){
+  const rs=data.records;
+  const rated=rs.filter(r=>r.stars>0);
+  const avg=rated.length?(rated.reduce((s,r)=>s+r.stars,0)/rated.length).toFixed(1):'–';
+  const breweries=new Set(rs.map(r=>r.brewery).filter(Boolean));
+  const prefs=new Set(rs.map(r=>r.pref).filter(Boolean));
+  let html=`<div class="tiles">
+    <div class="tile"><div class="v">${rs.length}</div><div class="k">総本数</div></div>
+    <div class="tile"><div class="v">${avg}</div><div class="k">平均★</div></div>
+    <div class="tile"><div class="v">${breweries.size}</div><div class="k">蔵元</div></div>
+    <div class="tile"><div class="v">${prefs.size}</div><div class="k">都道府県</div></div>
+  </div>`;
+  // 星分布（朱・単一色相・値直接表示）
+  const starCnt=[0,0,0,0,0];
+  rated.forEach(r=>starCnt[r.stars-1]++);
+  const smax=Math.max(1,...starCnt);
+  html+=`<div class="chart"><h3>評価の分布</h3>`+
+    [5,4,3,2,1].map(s=>`<div class="hbar"><span class="lbl">${'★'.repeat(s)}</span><span class="track"><span class="bar" style="width:${starCnt[s-1]/smax*100}%;background:${SHU}"></span></span><span class="num">${starCnt[s-1]||''}</span></div>`).join('')+`</div>`;
+  // 甘辛×香り 5x5（件数を各セルに直接表示）
+  const tcnt={}; let tmax=0;
+  rs.forEach(r=>{ if(r.sweet&&r.aroma){ const k=r.sweet+'-'+r.aroma; tcnt[k]=(tcnt[k]||0)+1; tmax=Math.max(tmax,tcnt[k]); } });
+  html+=`<div class="chart"><h3>味の好み（甘辛 × 香り）</h3><div class="taste-grid">`;
+  for(let a=5;a>=1;a--){
+    html+=`<div class="axis">${AROMA_LBL[a-1]}</div>`;
+    for(let s=1;s<=5;s++){
+      const n=tcnt[s+'-'+a]||0;
+      const alpha=n?0.18+0.72*(n/Math.max(1,tmax)):0;
+      html+=`<div class="cell" style="${n?`background:rgba(181,68,44,${alpha});${alpha>0.55?'color:#f6eddc':''}`:''}">${n||''}</div>`;
+    }
+  }
+  html+=`<div class="axis"></div>`+SWEET_LBL.map(l=>`<div class="axis">${l}</div>`).join('');
+  html+=`</div><div class="taste-note">縦=香り（上ほど華やか）／横=甘辛（右ほど辛口）。数字は本数。</div></div>`;
+  // 酒米別
+  const rcnt={};
+  rs.forEach(r=>{ if(r.rice) rcnt[r.rice]=(rcnt[r.rice]||0)+1; });
+  const rranked=Object.entries(rcnt).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if(rranked.length){
+    const rmax=rranked[0][1];
+    html+=`<div class="chart"><h3>酒米の分布（上位）</h3>`+
+      rranked.map(([p,n])=>`<div class="hbar"><span class="lbl">${esc(p)}</span><span class="track"><span class="bar" style="width:${n/rmax*100}%;background:${SHU}"></span></span><span class="num">${n}</span></div>`).join('')+`</div>`;
+  }
+  // 県別
+  const pcnt={};
+  rs.forEach(r=>{ if(r.pref) pcnt[r.pref]=(pcnt[r.pref]||0)+1; });
+  const ranked=Object.entries(pcnt).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if(ranked.length){
+    const pmax=ranked[0][1];
+    html+=`<div class="chart"><h3>産地の分布（上位）</h3>`+
+      ranked.map(([p,n])=>`<div class="hbar"><span class="lbl">${esc(p)}</span><span class="track"><span class="bar" style="width:${n/pmax*100}%;background:${AI}"></span></span><span class="num">${n}</span></div>`).join('')+`</div>`;
+  }
+  $('statsBody').innerHTML=html;
+}
+
+/* ================= 設定・バックアップ ================= */
+$('btnCfg').addEventListener('click',()=>{ $('cKey').value=cfg.apiKey; $('cModel').value=cfg.model; openModal('cfgModal'); });
+$('cSave').addEventListener('click',()=>{
+  cfg.apiKey=$('cKey').value.trim();
+  cfg.model=$('cModel').value.trim()||'claude-haiku-4-5';
+  saveCfg(); closeModal('cfgModal'); showStatus('設定を保存しました');
+});
+$('cExport').addEventListener('click',async()=>{
+  showStatus('書き出し中…');
+  const photos={};
+  for(const r of data.records){
+    const b=await photoGet(r.id); if(b) photos[r.id]=await blobToDataURL(b);
+    const bb=await photoGet(r.id+':b'); if(bb) photos[r.id+':b']=await blobToDataURL(bb);
+  }
+  const out={app:'meifuda',v:1,exportedAt:new Date().toISOString(),records:data.records,photos};
+  const blob=new Blob([JSON.stringify(out)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`meifuda-${fmtDate(new Date()).replace(/-/g,'')}.json`;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  showStatus(`${data.records.length}件を書き出しました`);
+});
+$('cImport').addEventListener('click',()=>$('importFile').click());
+$('importFile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; e.target.value='';
+  if(!f) return;
+  try{
+    const j=JSON.parse(await f.text());
+    if(j.app!=='meifuda'||!Array.isArray(j.records)) throw new Error('形式が違います');
+    const prevRecords=data.records;
+    data.records=j.records; saveData();
+    for(const [id,du] of Object.entries(j.photos||{})){
+      try{ await photoPut(id,dataURLToBlob(du)); photoInvalidate(id); }catch(err){}
+    }
+    closeModal('cfgModal'); renderWall();
+    showStatus(`${j.records.length}件を読み込みました`,()=>{ data.records=prevRecords; saveData(); renderWall(); });
+  }catch(err){ showStatus('読み込み失敗: '+err.message); }
+});
+
+/* ================= 起動 ================= */
+$('q').addEventListener('input',renderWall);
+$('sort').addEventListener('change',renderWall);
+renderStarsIn(); setSweet(0); setAroma(0);
+renderWall();
+</script>
+</body>
+</html>
