@@ -47,32 +47,31 @@ header button{
 .count{font-size:11px; color:#9a8c74; white-space:nowrap}
 
 /* ---- 短冊札 ---- */
-#wall{display:grid; grid-template-columns:repeat(auto-fill, minmax(86px,1fr)); gap:14px 10px; padding:4px 14px}
+#wall{display:grid; grid-template-columns:repeat(auto-fill, minmax(64px,1fr)); gap:10px 8px; padding:4px 12px}
 .fuda{
-  position:relative; height:238px; display:flex; flex-direction:column; align-items:center;
+  position:relative; height:176px; display:flex; flex-direction:column; align-items:center;
   background:linear-gradient(175deg, #f6eddc, var(--paper) 30%, var(--paper2));
-  color:var(--ink); border-radius:3px; padding:16px 4px 6px;
-  box-shadow:0 5px 9px rgba(0,0,0,.45), inset 0 0 18px rgba(120,90,40,.12);
-  transform:rotate(var(--rot,0deg)); transform-origin:top center;
+  color:var(--ink); border-radius:3px; padding:12px 3px 5px;
+  box-shadow:0 4px 7px rgba(0,0,0,.45), inset 0 0 14px rgba(120,90,40,.12);
 }
 .fuda .hole{
-  position:absolute; top:6px; left:50%; transform:translateX(-50%);
-  width:7px; height:7px; border-radius:50%; background:var(--wall);
+  position:absolute; top:5px; left:50%; transform:translateX(-50%);
+  width:6px; height:6px; border-radius:50%; background:var(--wall);
   box-shadow:inset 0 1px 1px rgba(0,0,0,.7), 0 0 0 2px #d9caac;
 }
 .fuda .fname{
   writing-mode:vertical-rl; text-orientation:mixed; flex:1;
-  font-weight:600; letter-spacing:.14em; line-height:1.1;
-  display:flex; align-items:center; overflow:hidden; max-height:150px;
+  font-weight:600; letter-spacing:.12em; line-height:1.1;
+  display:flex; align-items:center; overflow:hidden; max-height:112px;
 }
 .fuda .fphoto{
-  width:56px; height:56px; border-radius:2px; overflow:hidden; margin-top:6px;
+  width:42px; height:42px; border-radius:2px; overflow:hidden; margin-top:4px;
   background:#ddd0b5; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); flex:none;
 }
 .fuda .fphoto img{width:100%; height:100%; object-fit:cover; display:block}
-.fuda .fphoto .noimg{display:flex; align-items:center; justify-content:center; height:100%; font-size:20px; color:#b3a486}
-.fuda .fstars{font-size:10px; color:var(--shu); letter-spacing:.05em; margin-top:4px; height:12px}
-.fuda .fpref{position:absolute; top:16px; left:5px; writing-mode:vertical-rl; font-size:9px; color:var(--ink-soft); letter-spacing:.2em}
+.fuda .fphoto .noimg{display:flex; align-items:center; justify-content:center; height:100%; font-size:16px; color:#b3a486}
+.fuda .fstars{font-size:8px; color:var(--shu); letter-spacing:.03em; margin-top:3px; height:10px}
+.fuda .fpref{position:absolute; top:12px; left:3px; writing-mode:vertical-rl; font-size:8px; color:var(--ink-soft); letter-spacing:.18em}
 .empty-wall{grid-column:1/-1; text-align:center; color:#9a8c74; font-size:13px; padding:60px 20px; line-height:2}
 
 /* 記 seal button */
@@ -179,13 +178,13 @@ header button{
 .taste-grid .cell{aspect-ratio:1.4; display:flex; align-items:center; justify-content:center; background:#faf5ea; border-radius:2px; font-size:11px; color:var(--ink)}
 .taste-note{font-size:10px; color:var(--ink-soft); margin-top:6px; line-height:1.6}
 
-@media (min-width:700px){ #wall{grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); max-width:900px; margin:0 auto} }
+@media (min-width:700px){ #wall{grid-template-columns:repeat(auto-fill, minmax(72px,1fr)); max-width:900px; margin:0 auto} }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>酒銘札</h1><span class="ver">v1.6.2</span>
+  <h1>酒銘札</h1><span class="ver">v1.7</span>
   <span class="sp"></span>
   <button id="btnMap">地図</button>
   <button id="btnStats">集計</button>
@@ -608,7 +607,6 @@ async function geocode(addr,pref){
 }
 
 /* ================= 壁（一覧）描画 ================= */
-function rotFor(id){ let h=0; for(const c of id) h=(h*31+c.charCodeAt(0))>>>0; return ((h%40)-20)/12; }
 function starsStr(n){ return n?('★'.repeat(n)+'☆'.repeat(5-n)):''; }
 function currentList(){
   const q=$('q').value.trim().toLowerCase();
@@ -630,8 +628,8 @@ async function renderWall(){
   }
   wall.innerHTML=list.map(r=>{
     const nm=esc(r.brand||'銘柄未記入');
-    const fs=nm.length>8?13:nm.length>5?16:19;
-    return `<div class="fuda" data-id="${r.id}" style="--rot:${rotFor(r.id)}deg">
+    const fs=nm.length>8?11:nm.length>5?13:15;
+    return `<div class="fuda" data-id="${r.id}">
       <div class="hole"></div>
       ${r.pref?`<div class="fpref">${esc(r.pref.replace(/[都府県]$/,''))}</div>`:''}
       <div class="fname" style="font-size:${fs}px">${nm}</div>
