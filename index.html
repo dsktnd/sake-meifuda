@@ -185,7 +185,7 @@ header button{
 <body>
 
 <header>
-  <h1>酒銘札</h1><span class="ver">v1.6</span>
+  <h1>酒銘札</h1><span class="ver">v1.6.1</span>
   <span class="sp"></span>
   <button id="btnMap">地図</button>
   <button id="btnStats">集計</button>
@@ -231,7 +231,8 @@ header button{
     <div class="frow"><label>都道府県</label><select id="fPref"></select></div>
   </div>
   <div class="frow"><label>蔵元住所（地図ピン用）</label><input type="text" id="fAddress" autocomplete="off">
-    <div class="hint">AI推定は誤ることがあります。保存時に座標化し、地図でピンを直せます。</div></div>
+    <div class="hint">AI推定は誤ることがあります。保存時に座標化し、地図でピンを直せます。
+      <button type="button" class="btn small" id="fGeoBtn" style="margin-top:6px;width:100%">住所から位置を再取得</button></div></div>
   <div class="grid2">
     <div class="frow"><label>特定名称</label><input type="text" id="fSpec" list="specList" autocomplete="off">
       <datalist id="specList"><option>純米大吟醸酒</option><option>純米吟醸酒</option><option>特別純米酒</option><option>純米酒</option><option>大吟醸酒</option><option>吟醸酒</option><option>特別本醸造酒</option><option>本醸造酒</option><option>普通酒</option></datalist></div>
@@ -576,20 +577,29 @@ async function readLabel(b64s,useSearch){
 }
 
 /* ================= 地理院ジオコーディング ================= */
-async function gsiSearch(q){
+async function gsiSearch(q,pref){
   try{
     const r=await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(q));
     const a=await r.json();
-    if(Array.isArray(a)&&a.length){ const [lng,lat]=a[0].geometry.coordinates; return {lat,lng,src:'addr'}; }
+    if(!Array.isArray(a)||!a.length) return null;
+    // 県が分かっている場合、県違いの候補（別県の同名地名）は絶対に採用しない
+    if(pref){
+      const hit=a.find(x=>((x.properties&&x.properties.title)||'').startsWith(pref))
+             ||a.find(x=>((x.properties&&x.properties.title)||'').includes(pref));
+      if(!hit) return null;
+      const [lng,lat]=hit.geometry.coordinates; return {lat,lng,src:'addr'};
+    }
+    const [lng,lat]=a[0].geometry.coordinates; return {lat,lng,src:'addr'};
   }catch(e){}
   return null;
 }
 async function geocode(addr,pref){
   if(addr){
-    let g=await gsiSearch(addr);
+    const q=(pref&&!addr.includes(pref))?pref+addr:addr; // 県名が無ければ頭に付けて検索
+    let g=await gsiSearch(q,pref);
     if(!g){ // 番地・ビル名で一致しない場合は数字以降を落として町名までで再検索
-      const s=addr.replace(/[0-9０-９].*$/,'').trim();
-      if(s&&s!==addr) g=await gsiSearch(s);
+      const s=q.replace(/[0-9０-９].*$/,'').trim();
+      if(s&&s!==q) g=await gsiSearch(s,pref);
     }
     if(g) return g;
   }
@@ -752,6 +762,14 @@ async function runRead(){
     el.classList.add('err');
   }
 }
+$('fGeoBtn').addEventListener('click',async()=>{
+  const el=$('aiStatus'); el.classList.remove('err');
+  el.textContent='住所から位置を取得しています…';
+  const g=await geocode($('fAddress').value.trim(),$('fPref').value);
+  pendingGeo=g;
+  el.textContent=g?(g.src==='addr'?'位置を取得しました（保存で地図に反映されます）':'住所から特定できず県庁所在地を仮置き（保存で反映・地図の📍で微調整可）')
+                 :'位置を取得できませんでした（住所と都道府県を確認してください）';
+});
 $('seal').addEventListener('click',()=>$('file').click());
 $('pfAdd').addEventListener('click',()=>$('file').click());
 $('bkAdd').addEventListener('click',()=>$('fileBack').click());
@@ -819,7 +837,8 @@ $('fSave').addEventListener('click',async()=>{
     if(g){ rec.lat=g.lat; rec.lng=g.lng; geoSrc=g.src; }
   }
   // 地図は蔵元単位でピン表示のため、同じ蔵元の他レコードにも新座標を反映
-  if(addrChanged&&rec.lat!=null){
+  const coordsChanged=prev&&(prev.lat!==rec.lat||prev.lng!==rec.lng);
+  if((addrChanged||coordsChanged)&&rec.lat!=null){
     const key=rec.brewery||rec.brand;
     for(const r of data.records){ if(r.id!==id&&(r.brewery||r.brand)===key){ r.lat=rec.lat; r.lng=rec.lng; } }
   }
@@ -833,7 +852,7 @@ $('fSave').addEventListener('click',async()=>{
   closeModal('formModal');
   renderWall();
   let msg=isNew?`「${brand}」を札に掛けました`:`「${brand}」を更新しました`;
-  if(isNew||addrChanged){
+  if(isNew||addrChanged||coordsChanged){
     if(geoSrc==='addr') msg+='。地図の位置を住所から更新しました';
     else if(geoSrc==='pref') msg+='。住所が特定できず県庁所在地に仮置き（地図の📍で修正可）';
   }
