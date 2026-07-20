@@ -185,7 +185,7 @@ header button{
 <body>
 
 <header>
-  <h1>酒銘札</h1><span class="ver">v1.6.1</span>
+  <h1>酒銘札</h1><span class="ver">v1.6.2</span>
   <span class="sp"></span>
   <button id="btnMap">地図</button>
   <button id="btnStats">集計</button>
@@ -1109,11 +1109,35 @@ $('importFile').addEventListener('change',async e=>{
   }catch(err){ showStatus('読み込み失敗: '+err.message); }
 });
 
+/* ================= 起動時の座標自動修復 =================
+   登録済みの都道府県から明らかに離れた座標（過去の県違い誤ヒット）や
+   座標未取得の記録を検出し、住所から再ジオコーディングして直す */
+async function repairGeo(){
+  let fixed=0;
+  for(const r of data.records){
+    if(!r.pref||!PREF_LL[r.pref]) continue;
+    const [pla,plo]=PREF_LL[r.pref];
+    const lngTol=r.pref==='北海道'?8:4.5;
+    const far=r.lat==null||Math.abs(r.lat-pla)>2.6||Math.abs(r.lng-plo)>lngTol;
+    if(!far) continue;
+    try{
+      const g=await geocode(r.address,r.pref);
+      if(g&&(g.lat!==r.lat||g.lng!==r.lng)){ r.lat=g.lat; r.lng=g.lng; fixed++; }
+    }catch(e){}
+  }
+  if(fixed){
+    saveData();
+    showStatus(`地図の位置を自動修正しました（${fixed}件）`);
+    if(map&&$('mapModal').classList.contains('open')) drawMapLayer();
+  }
+}
+
 /* ================= 起動 ================= */
 $('q').addEventListener('input',renderWall);
 $('sort').addEventListener('change',renderWall);
 renderStarsIn(); setSweet(0); setAroma(0);
 renderWall();
+repairGeo();
 </script>
 </body>
 </html>
