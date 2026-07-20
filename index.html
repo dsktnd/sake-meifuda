@@ -185,7 +185,7 @@ header button{
 <body>
 
 <header>
-  <h1>酒銘札</h1><span class="ver">v1.5.2</span>
+  <h1>酒銘札</h1><span class="ver">v1.6</span>
   <span class="sp"></span>
   <button id="btnMap">地図</button>
   <button id="btnStats">集計</button>
@@ -269,7 +269,8 @@ header button{
 <div class="modal" id="mapModal"><div class="panel" id="mapPanel">
   <h2><span>蔵元の地図</span><span class="sp"></span><button data-close>×</button></h2>
   <div class="map-toggle">
-    <button id="mtPins" class="on">蔵元ピン</button>
+    <button id="mtPins" class="on">蔵元</button>
+    <button id="mtShot">飲んだ場所</button>
     <button id="mtPref">県別集計</button>
   </div>
   <div id="map"></div>
@@ -320,6 +321,7 @@ let pendingPhoto=null;       // 保存待ちの表写真Blob
 let pendingBack=null;        // 保存待ちの裏写真Blob（IndexedDBキーは id+':b'）
 let pendingB64F=null, pendingB64B=null; // AI読み取り用base64
 let pendingGeo=null;         // AI読み取りで得た {lat,lng}
+let pendingShot=null;        // 写真ExifのGPS＝飲んだ場所 {lat,lng}
 let starsVal=0, sweetVal=0, aromaVal=0;
 const urlCache=new Map();    // id -> objectURL
 let undoFn=null, undoTimer=null;
@@ -378,21 +380,49 @@ function tiffDate(v,t){
   if(ds){ const m=ds.match(/^(\d{4}):(\d{2}):(\d{2})/); if(m) return `${m[1]}-${m[2]}-${m[3]}`; }
   return null;
 }
+function tiffStartOf(v){ // Exif TIFFヘッダの位置（JPEG=APP1内 / DNG=先頭）
+  const mg=v.getUint16(0);
+  if(mg===0x4949||mg===0x4D4D) return 0;               // TIFF / DNG(RAW)
+  if(mg!==0xFFD8) return -1;                            // JPEG以外
+  let o=2;
+  while(o+4<v.byteLength){
+    if(v.getUint8(o)!==0xFF) break;
+    const marker=v.getUint8(o+1), size=v.getUint16(o+2);
+    if(marker===0xE1 && v.getUint32(o+4)===0x45786966) return o+10; // "Exif"
+    o+=2+size;
+  }
+  return -1;
+}
 function exifDate(buf){
-  try{
-    const v=new DataView(buf);
-    const mg=v.getUint16(0);
-    if(mg===0x4949||mg===0x4D4D) return tiffDate(v,0);  // TIFF / DNG(RAW)
-    if(mg!==0xFFD8) return null;                         // JPEG以外
-    let o=2;
-    while(o+4<v.byteLength){
-      if(v.getUint8(o)!==0xFF) break;
-      const marker=v.getUint8(o+1), size=v.getUint16(o+2);
-      if(marker===0xE1 && v.getUint32(o+4)===0x45786966) return tiffDate(v,o+10); // "Exif"
-      o+=2+size;
-    }
-  }catch(e){}
-  return null;
+  try{ const v=new DataView(buf); const t=tiffStartOf(v); return t<0?null:tiffDate(v,t); }catch(e){ return null; }
+}
+function tiffGPS(v,t){ // GPS IFD (0x8825) から撮影地点の緯度経度
+  const le=v.getUint16(t)===0x4949;
+  const g16=p=>v.getUint16(t+p,le), g32=p=>v.getUint32(t+p,le);
+  const ifd0=g32(4); if(ifd0<=0) return null;
+  const n=g16(ifd0); if(!n||n>512) return null;
+  let gps=0;
+  for(let i=0;i<n;i++){ const e=ifd0+2+i*12; if(g16(e)===0x8825) gps=g32(e+8); }
+  if(!gps) return null;
+  const gn=g16(gps); if(!gn||gn>64) return null;
+  const rat3=off=>{ const r=[]; for(let j=0;j<3;j++){ const num=g32(off+j*8), den=g32(off+j*8+4); r.push(den?num/den:0); } return r; };
+  let latRef='',lngRef='',lat=null,lng=null;
+  for(let i=0;i<gn;i++){
+    const e=gps+2+i*12, tag=g16(e);
+    if(tag===1) latRef=String.fromCharCode(v.getUint8(t+e+8));
+    if(tag===3) lngRef=String.fromCharCode(v.getUint8(t+e+8));
+    if(tag===2) lat=rat3(g32(e+8));
+    if(tag===4) lng=rat3(g32(e+8));
+  }
+  if(!lat||!lng) return null;
+  let la=lat[0]+lat[1]/60+lat[2]/3600, lo=lng[0]+lng[1]/60+lng[2]/3600;
+  if(latRef==='S') la=-la;
+  if(lngRef==='W') lo=-lo;
+  if(!isFinite(la)||!isFinite(lo)||(la===0&&lo===0)) return null;
+  return {lat:+la.toFixed(6),lng:+lo.toFixed(6)};
+}
+function exifGPS(buf){
+  try{ const v=new DataView(buf); const t=tiffStartOf(v); return t<0?null:tiffGPS(v,t); }catch(e){ return null; }
 }
 // DNG/TIFF内の埋め込みJPEGプレビューを取り出す（ブラウザはRAW本体をデコードできないため）
 function dngPreview(buf){
@@ -639,7 +669,7 @@ function openForm(rec,photoBlob){
   editingId=rec?rec.id:null;
   pendingPhoto=photoBlob||null;
   pendingBack=null; pendingB64F=null; pendingB64B=null;
-  pendingGeo=null;
+  pendingGeo=null; pendingShot=null;
   $('formTitle').textContent=rec?'銘札を直す':'一献を記す';
   $('fBrand').value=rec?.brand||''; $('fKana').value=rec?.kana||'';
   $('fBrewery').value=rec?.brewery||''; $('fPref').value=rec?.pref||'';
@@ -681,7 +711,7 @@ async function prepPhoto(file){
     }
   }
   const b64=await blobToB64(blob);
-  return {blob,b64,date};
+  return {blob,b64,date,gps:buf?exifGPS(buf):null};
 }
 function updateAiHint(){
   const el=$('aiStatus'); el.classList.remove('err');
@@ -736,10 +766,12 @@ $('file').addEventListener('change',async e=>{
   const formOpen=$('formModal').classList.contains('open');
   if(formOpen){
     pendingPhoto=p.blob; pendingB64F=p.b64;
+    if(!pendingShot&&p.gps) pendingShot=p.gps;
     const prev=$('fPhotoPrev'); prev.src=URL.createObjectURL(p.blob); prev.hidden=false;
   }else{
     openForm(null,p.blob);
     pendingB64F=p.b64;
+    if(p.gps) pendingShot=p.gps;
     if(p.date)$('fDate').value=p.date;
     updateAiHint();
   }
@@ -753,6 +785,7 @@ $('fileBack').addEventListener('change',async e=>{
   try{ p=await prepPhoto(file); }
   catch(err){ el.textContent='裏写真の処理に失敗（'+err.message+'）'; el.classList.add('err'); return; }
   pendingBack=p.blob; pendingB64B=p.b64;
+  if(!pendingShot&&p.gps) pendingShot=p.gps;
   const bprev=$('fBackPrev'); bprev.src=URL.createObjectURL(p.blob); bprev.hidden=false;
   if(cfg.apiKey) runRead(); else updateAiHint();
 });
@@ -773,8 +806,10 @@ $('fSave').addEventListener('click',async()=>{
     stars:starsVal, sweet:sweetVal, aroma:aromaVal,
     memo:$('fMemo').value.trim(),
     lat:prev?.lat??null, lng:prev?.lng??null,
+    shotLat:prev?.shotLat??null, shotLng:prev?.shotLng??null,
     createdAt:prev?.createdAt||Date.now()
   };
+  if(pendingShot){ rec.shotLat=pendingShot.lat; rec.shotLng=pendingShot.lng; }
   // 座標: 住所・県が変わったら必ず再取得（AI読み取り時のpendingGeoは住所未変更のときだけ利用）
   const addrChanged=prev&&(prev.address!==rec.address||prev.pref!==rec.pref);
   let geoSrc=null;
@@ -794,7 +829,7 @@ $('fSave').addEventListener('click',async()=>{
   if(map&&$('mapModal').classList.contains('open')) drawMapLayer();
   if(pendingPhoto){ try{ await photoPut(id,pendingPhoto); photoInvalidate(id); }catch(e){ showStatus('写真の保存に失敗（容量不足の可能性）'); } }
   if(pendingBack){ try{ await photoPut(id+':b',pendingBack); photoInvalidate(id+':b'); }catch(e){} }
-  pendingPhoto=null; pendingBack=null; pendingB64F=null; pendingB64B=null; editingId=null;
+  pendingPhoto=null; pendingBack=null; pendingB64F=null; pendingB64B=null; pendingShot=null; editingId=null;
   closeModal('formModal');
   renderWall();
   let msg=isNew?`「${brand}」を札に掛けました`:`「${brand}」を更新しました`;
@@ -888,19 +923,29 @@ function breweryGroups(){
   }
   return [...g.values()];
 }
-function drawMapLayer(){
+function drawMapLayer(fit=true){
   if(mapLayer){ mapLayer.remove(); mapLayer=null; }
   mapLayer=L.layerGroup().addTo(map);
+  const pts=[];
   if(mapMode==='pins'){
     for(const b of breweryGroups()){
       const m=L.circleMarker([b.lat,b.lng],{radius:8,color:SHU,weight:2,fillColor:SHU,fillOpacity:.75}).addTo(mapLayer);
       const list=b.recs.map(r=>`${esc(r.brand)} ${starsStr(r.stars)}`).join('<br>');
       m.bindPopup(`<b>${esc(b.name)}</b><br>${list}<br><a href="#" data-fix="${esc(b.recs[0].id)}">📍 位置を直す</a>`);
+      pts.push([b.lat,b.lng]);
     }
     mapLayer.eachLayer(l=>l.on('popupopen',e=>{
       const a=e.popup.getElement().querySelector('[data-fix]');
       if(a) a.addEventListener('click',ev=>{ev.preventDefault(); const r=data.records.find(x=>x.id===a.dataset.fix); map.closePopup(); startPinFix(r);});
     }));
+  }else if(mapMode==='shot'){
+    for(const r of data.records){
+      if(r.shotLat==null) continue;
+      L.circleMarker([r.shotLat,r.shotLng],{radius:8,color:AI,weight:2,fillColor:AI,fillOpacity:.75})
+        .bindPopup(`<b>${esc(r.brand)}</b> ${starsStr(r.stars)}<br>${esc(r.date||'')}${r.brewery?'<br>'+esc(r.brewery):''}`)
+        .addTo(mapLayer);
+      pts.push([r.shotLat,r.shotLng]);
+    }
   }else{
     const cnt={};
     for(const r of data.records){ if(r.pref) cnt[r.pref]=(cnt[r.pref]||0)+1; }
@@ -909,7 +954,13 @@ function drawMapLayer(){
       L.circleMarker([lat,lng],{radius:7+Math.sqrt(n)*5,color:AI,weight:2,fillColor:AI,fillOpacity:.55})
         .bindTooltip(`${pref} ${n}本`,{permanent:n>=2,direction:'right',className:'pref-tip'})
         .addTo(mapLayer);
+      pts.push([lat,lng]);
     }
+  }
+  // ピンのある範囲へ自動ズーム
+  if(fit&&pts.length){
+    if(pts.length===1) map.setView(pts[0],10);
+    else map.fitBounds(L.latLngBounds(pts).pad(0.25),{maxZoom:11});
   }
 }
 function startPinFix(rec){
@@ -927,7 +978,7 @@ function endPinFix(save){
       const key=fixTarget.brewery||fixTarget.brand;
       let n=0;
       for(const r of data.records){ if((r.brewery||r.brand)===key){ r.lat=lat; r.lng=lng; n++; } }
-      saveData(); drawMapLayer();
+      saveData(); drawMapLayer(false);
       showStatus(`「${key}」のピンを修正しました（${n}件）`);
     }
     fixMarker.remove(); fixMarker=null;
@@ -935,8 +986,14 @@ function endPinFix(save){
   fixTarget=null; $('pinFixBar').style.display='none';
 }
 $('pinFixDone').addEventListener('click',()=>endPinFix(true));
-$('mtPins').addEventListener('click',()=>{ mapMode='pins'; $('mtPins').classList.add('on'); $('mtPref').classList.remove('on'); endPinFix(false); drawMapLayer(); });
-$('mtPref').addEventListener('click',()=>{ mapMode='pref'; $('mtPref').classList.add('on'); $('mtPins').classList.remove('on'); endPinFix(false); drawMapLayer(); });
+function setMapMode(m){
+  mapMode=m;
+  for(const [id,mm] of [['mtPins','pins'],['mtShot','shot'],['mtPref','pref']]) $(id).classList.toggle('on',mm===m);
+  endPinFix(false); drawMapLayer();
+}
+$('mtPins').addEventListener('click',()=>setMapMode('pins'));
+$('mtShot').addEventListener('click',()=>setMapMode('shot'));
+$('mtPref').addEventListener('click',()=>setMapMode('pref'));
 $('btnMap').addEventListener('click',()=>openMap(null));
 
 /* ================= 集計 ================= */
